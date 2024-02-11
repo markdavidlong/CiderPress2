@@ -51,6 +51,9 @@ namespace FileConv.Gfx {
         private const int FIRST_ASCII_CHAR_LOCATION = 0x11;
         private const int IS_PROPORTIONAL_LOCATION = 0x12;
 
+
+        private const int FONT_HEIGHT_LOC = 0x14;
+        private const int FONT_WIDTH_LOC = 0x13;
         private const int ID_BYTE_1 = 0x18;
         private const int ID_BYTE_2 = 0x19;
         private const int ID_BYTE_3 = 0x1a;
@@ -103,6 +106,14 @@ namespace FileConv.Gfx {
                                  buffer[ID_BYTE_2] == ID_BYTE_2_VAL &&
                                  buffer[ID_BYTE_3] == ID_BYTE_3_VAL &&
                                  buffer[CHAR_COUNT_LOCATION] <= MAX_NUM_CHARACTERS;
+
+                    // Try checking with the bit-flipped values of the id bytes
+                    if (!valid) {
+                        valid = buffer[ID_BYTE_1] == (ID_BYTE_1_VAL ^ (byte)0xff) &&
+                     buffer[ID_BYTE_2] == (ID_BYTE_2_VAL ^ (byte)0xff) &&
+                     buffer[ID_BYTE_3] == (ID_BYTE_3_VAL ^ (byte)0xff) &&
+                     buffer[CHAR_COUNT_LOCATION] <= MAX_NUM_CHARACTERS;
+                    }
 
                     if (valid) {
                         return Applicability.Yes;
@@ -273,8 +284,17 @@ namespace FileConv.Gfx {
                     byte charHeight = GetFontHeight();
                     byte[] charData = GetDataForCharacter(currCharNum);
 
+                    String p = IsFontProportional() ? "P " : "NP";
+                    Console.WriteLine("{3} Char {0}  Calc: {1}  Measured: {2} Global: {4}",
+                    currCharNum,
+                    charWidth,
+                    DataBuf[currCharNum + 0xe2], p, GetGlobalGlyphWidth());
+                    Console.WriteLine("Read {0} bytes for character", charData.Length);
+
                     int offset = 0;
 
+                    Console.WriteLine("Rows < " + charHeight);
+                    Console.WriteLine("WidthBytes < {0} for width {1}",WidthToBytes(charWidth),charWidth);
                     for (int row = 0; row < charHeight; row++) {
                         for (int col = 0; col < WidthToBytes(charWidth); col++) {
                             byte bval = charData[offset++];
@@ -367,7 +387,16 @@ namespace FileConv.Gfx {
         /// <returns>The pixel height of all characters.</returns>
         private byte GetFontHeight() {
             Debug.Assert(DataBuf != null);
-            return DataBuf[0x14];
+            return DataBuf[FONT_HEIGHT_LOC];
+        }
+
+        /// <summary>
+        /// Get the width in pixels for all characters in the font.
+        /// </summary>
+        /// <returns>The pixel height of all characters.</returns>
+        private byte GetGlobalGlyphWidth() {
+            Debug.Assert(DataBuf != null);
+            return DataBuf[FONT_WIDTH_LOC];
         }
 
 
@@ -381,10 +410,12 @@ namespace FileConv.Gfx {
         /// The most relevant pixel width of the character within the file. 
         /// </returns>
         private byte GetWidthForCharacter(int offset) {
+            var width = GetMeasuredWidthForCharacter(offset); 
             if (IsFontProportional()) {
-                return GetMeasuredWidthForCharacter(offset);
+                return width;
             } else {
-                return GetFullWidthForCharacter(offset);
+                if (width == 0) { width = GetGlobalGlyphWidth(); }  //GetFullWidthForCharacter(offset);
+                return width;
             }
         }
 
@@ -442,6 +473,7 @@ namespace FileConv.Gfx {
         /// along each line.  This is generally smaller than the full width value.
         /// </returns>
         private byte GetMeasuredWidthForCharacter(int offset) {
+            return DataBuf[offset + 0xe2];
             var height = GetFontHeight();
             var byteWidth = GetFullWidthForCharacter(offset) / 8;
             var data = GetDataForCharacter(offset);
@@ -478,13 +510,17 @@ namespace FileConv.Gfx {
         /// <returns>A byte array containing the character data.</returns>
         private byte[] GetDataForCharacter(int offset) {
             byte width = GetFullWidthForCharacter(offset);
-
             int dataLength = GetFontHeight() * WidthToBytes(width);
 
             ushort dataOffset = GetDataOffsetForCharacter(offset);
+            ushort nextDataOffset = offset <= 94 ? GetDataOffsetForCharacter(offset + 1) : (ushort)DataBuf.Length; 
+            dataLength = nextDataOffset - dataOffset;
+            Console.WriteLine("  GDFC: DO: {0} Next: {1} Diff: {2}  FW: {3} H: {4}",
+            dataOffset, nextDataOffset, nextDataOffset - dataOffset, width, GetFontHeight());
 
-            byte[] retval = new byte[dataLength];
+            byte[] retval = new byte[dataLength+1];
             for (int idx = 0; idx < dataLength; idx++) {
+//                Console.WriteLine("Reading from location #{0} @ {1}  (Max: {2})", idx, idx+dataOffset, DataBuf.Length-1);
                 retval[idx] = DataBuf[dataOffset + idx];
             }
             return retval;
