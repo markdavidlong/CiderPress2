@@ -29,10 +29,9 @@ always match the current "final" release.
  6. If file format docs have changed, use the `ndocs/formatdoc/convert.py`
     script (see below).
  7. From the command line, change into the `ndocs` directory and run
-    `publish.py` (you may need to explicitly run python if the shell isn't
-    set up to execute scripts directly).  This will update the contents of
-    the `docs` directory and the top-level documentation (including this file)
-    with the contents of `ndocs`.  Check the diffs.
+    `publish.py`.  This will update the contents of the `docs` directory
+    and the top-level documentation with the files in `ndocs`.  Check the
+    diffs to confirm the changes look reasonable.
 
 Finally, build the applications and submit the changes.
 
